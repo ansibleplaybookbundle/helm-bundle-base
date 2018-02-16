@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+set -ex
 
 # Work-Around
 # The OpenShift's s2i (source to image) requires that no ENTRYPOINT exist
@@ -32,8 +32,12 @@ else
 fi
 
 shift
-TARGET_NAMESPACE=$(echo "$2" | jq -r .namespace)
-INSTANCE_ID=$(echo "$2" | jq -r ._apb_service_instance_id)
+TARGET_NAMESPACE=$(echo $2 | jq -r .namespace)
+REPO_URL=$(echo $2 | jq -r .repo)
+REPO_NAME="chartrepo"
+CHART=$(echo $2 | jq -r .chart)
+VERSION=$(echo $2 | jq -r .version)
+NAME=$(echo $2 | jq -r .name)
 VALUES_FILE=$(mktemp --tmpdir= values.XXXX)
 echo "$2" | jq -r .values | tee $VALUES_FILE
 
@@ -44,13 +48,14 @@ if ! whoami &> /dev/null; then
 fi
 
 ### HELM
-
-helm template --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
+helm init --client-only
+helm repo add $REPO_NAME $REPO_URL
+helm fetch $REPO_NAME/$CHART --version=$VERSION --untar -d /opt/apb
+helm template --name=$NAME -f $VALUES_FILE /opt/apb/$CHART | sed -n '/---/,$p' > /tmp/manifest
 echo "##########################"
 cat /tmp/manifest
 echo "##########################"
-kubectl $KUBECTL_COMMAND -n $TARGET_NAMESPACE -f /tmp/manifest
-
+kubectl $KUBECTL_COMMAND --namespace=$TARGET_NAMESPACE -f /tmp/manifest
 ###
 
 EXIT_CODE=$?
