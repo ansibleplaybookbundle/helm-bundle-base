@@ -23,9 +23,9 @@ fi
 
 ACTION=$1
 if [[ $ACTION == provision ]]; then
-    OC_COMMAND=create
+    KUBECTL_COMMAND=create
 elif [[ $ACTION == deprovision ]]; then
-    OC_COMMAND=delete
+    KUBECTL_COMMAND=delete
 else
     echo First argument must be one of "provision" or "deprovision".
     exit 1
@@ -48,7 +48,7 @@ helm template --debug --name $INSTANCE_ID /opt/chart.tgz --set securityContext.e
 echo "##########################"
 cat /tmp/manifest
 echo "##########################"
-oc $OC_COMMAND -n $TARGET_NAMESPACE -f /tmp/manifest
+kubectl $KUBECTL_COMMAND -n $TARGET_NAMESPACE -f /tmp/manifest
 
 ###
 
