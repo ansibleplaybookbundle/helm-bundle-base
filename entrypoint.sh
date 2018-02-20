@@ -33,6 +33,7 @@ fi
 
 shift
 TARGET_NAMESPACE=$(echo $2 | jq -r .namespace)
+INSTANCE_ID=$(echo $2 | jq -r ._apb_service_instance_id)
 CREDS="/var/tmp/bind-creds"
 
 if ! whoami &> /dev/null; then
@@ -43,7 +44,7 @@ fi
 
 ### HELM
 
-helm template --debug --name my-redis /opt/chart.tgz --set securityContext.enabled=False | sed -n '/---/,$p' > /tmp/manifest
+helm template --debug --name $INSTANCE_ID /opt/chart.tgz --set securityContext.enabled=False | sed -n '/---/,$p' > /tmp/manifest
 echo "##########################"
 cat /tmp/manifest
 echo "##########################"
