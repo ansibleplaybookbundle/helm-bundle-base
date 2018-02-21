@@ -44,7 +44,7 @@ fi
 
 ### HELM
 
-helm template --debug --name $INSTANCE_ID /opt/chart.tgz --set securityContext.enabled=False | sed -n '/---/,$p' > /tmp/manifest
+helm template --debug --name bundle-${INSTANCE_ID::8} /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
 echo "##########################"
 cat /tmp/manifest
 echo "##########################"
