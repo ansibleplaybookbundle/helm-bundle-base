@@ -5,7 +5,7 @@ the name of the chart archive as appropriate. Do not change the destination
 filename.
 
 ```
-FROM mhrivnak/helm-bundle-base
+FROM ansibleplaybookbundle/helm-bundle-base
 
 LABEL "com.redhat.apb.spec"=\
 
