@@ -1,4 +1,18 @@
+# helm-bundle-base
+
+This base image for a Service Bundle uses a provided helm chart to provision
+or deprovision a service.
+
+
 ## Getting Started
+
+### helm2bundle
+
+The easiest option is to use the
+[helm2bundle](https://github.com/ansibleplaybookbundle/helm2bundle) tool, which
+utilizes this base image.
+
+### Direct Use
 
 Create a new Dockerfile for your service bundle using the content below. Change
 the name of the chart archive as appropriate. Do not change the destination
