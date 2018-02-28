@@ -32,9 +32,10 @@ else
 fi
 
 shift
-TARGET_NAMESPACE=$(echo $2 | jq -r .namespace)
-INSTANCE_ID=$(echo $2 | jq -r ._apb_service_instance_id)
-CREDS="/var/tmp/bind-creds"
+TARGET_NAMESPACE=$(echo "$2" | jq -r .namespace)
+INSTANCE_ID=$(echo "$2" | jq -r ._apb_service_instance_id)
+VALUES_FILE=$(mktemp --tmpdir= values.XXXX)
+echo "$2" | jq -r .values | tee $VALUES_FILE
 
 if ! whoami &> /dev/null; then
   if [ -w /etc/passwd ]; then
@@ -44,7 +45,7 @@ fi
 
 ### HELM
 
-helm template --debug --name bundle-${INSTANCE_ID::8} /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
+helm template --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
 echo "##########################"
 cat /tmp/manifest
 echo "##########################"
