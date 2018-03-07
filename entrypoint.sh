@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+set -ex
 
 # Work-Around
 # The OpenShift's s2i (source to image) requires that no ENTRYPOINT exist
@@ -40,9 +40,10 @@ REPO_URL=$(echo $2 | jq -r .repo)
 REPO_NAME=$(echo $2 | jq -r .repo_name)
 CHART=$(echo $2 | jq -r .chart)
 NAME=$(echo $2 | jq -r .name)
+TILLER=$(echo $2 | jq -r .tiller)
 VALUES_FILE=$(mktemp --tmpdir= values.XXXX)
 echo "$2" | jq -r .values | tee $VALUES_FILE
-[ "$(echo $2 | jq -r .tiller)" == "false" ] && USE_TILLER=0 || USE_TILLER=1
+[ ${TILLER,,} == "true" ] && USE_TILLER=1 || USE_TILLER=0
 
 if ! whoami &> /dev/null; then
   if [ -w /etc/passwd ]; then
@@ -50,7 +51,8 @@ if ! whoami &> /dev/null; then
   fi
 fi
 
-function setup_tiller() {
+### HELM
+if [ $USE_TILLER ]; then
     # Create permissions for tiller in target namespace
     kubectl get serviceaccount --namespace=$TARGET_NAMESPACE tiller || \
         kubectl create serviceaccount --namespace=$TARGET_NAMESPACE tiller
@@ -59,26 +61,30 @@ function setup_tiller() {
             --namespace=$TARGET_NAMESPACE \
             --clusterrole=edit \
             --serviceaccount=$TARGET_NAMESPACE:tiller
+
     # Start Tiller
-    helm init --service-account=tiller --tiller-namespace=$TARGET_NAMESPACE
-}
+    kubectl get deploy --namespace=$TARGET_NAMESPACE tiller-deploy || \
+        helm init --service-account=tiller --tiller-namespace=$TARGET_NAMESPACE
 
-function teardown_tiller() {
-    helm reset --tiller-namespace=$TARGET_NAMESPACE && REMOVE_TILLER=1 || REMOVE_TILLER=0
-    if $REMOVE_TILLER; then
-        kubectl delete serviceaccount --namespace=$TARGET_NAMESPACE tiller
-        kubectl delete rolebinding --namespace=$TARGET_NAMESPACE tiller
-    fi
-}
-
-### HELM
-if $USE_TILLER; then
-    setup_tiller
+    echo "Waiting for tiller"
+    for i in {1..60}; do # timeout for 5 minutes
+        TILLER_AVAILABLE=$(
+            kubectl get deploy --namespace=$TARGET_NAMESPACE tiller-deploy \
+            -o jsonpath='{.status.conditions[?(.type == "Available")].status}'
+        )
+       if [ ${TILLER_AVAILABLE,,} == "true" ]; then
+          break
+      fi
+      sleep 5
+    done
+else
+    echo "Initializing helm, client only"
+    helm init --client-only
 fi
 
 helm repo add $REPO_NAME $REPO_URL
 
-if $USE_TILLER; then
+if [ $USE_TILLER ]; then
     helm $HELM_COMMAND $REPO_NAME/$CHART \
         --tiller-namespace=$TARGET_NAMESPACE \
         --name=$NAME \
@@ -86,15 +92,19 @@ if $USE_TILLER; then
         --namespace=$TARGET_NAMESPACE
 else
     helm fetch $REPO_NAME/$CHART --untar -d /opt/apb
-	helm template --name=$NAME /opt/apb/$CHART | sed -n '/---/,$p' > /tmp/manifest
-	echo "##########################"
-	cat /tmp/manifest
-	echo "##########################"
-	kubectl $KUBECTL_COMMAND --namespace=$TARGET_NAMESPACE -f /tmp/manifest
+    helm template --name=$NAME /opt/apb/$CHART | sed -n '/---/,$p' > /tmp/manifest
+    echo "##########################"
+    cat /tmp/manifest
+    echo "##########################"
+    kubectl $KUBECTL_COMMAND --namespace=$TARGET_NAMESPACE -f /tmp/manifest
 fi
 
-if [[ $ACTION == deprovision ]]; then
-    teardown_tiller
+if [[ $ACTION == deprovision ]] && [ $USE_TILLER ]; then
+    helm reset --tiller-namespace=$TARGET_NAMESPACE && REMOVE_TILLER=1 || REMOVE_TILLER=0
+    if [ $REMOVE_TILLER ]; then
+        kubectl delete serviceaccount --namespace=$TARGET_NAMESPACE tiller
+        kubectl delete rolebinding --namespace=$TARGET_NAMESPACE tiller
+    fi
 fi
 ###
 
