@@ -5,6 +5,6 @@ RUN yum install -y jq && yum clean all
 USER apb
 
 COPY helm /bin/helm
-COPY entrypoint.sh /bin/entrypoint.sh
+COPY entrypoint.sh /usr/bin/hbb-entrypoint.sh
 
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["hbb-entrypoint.sh"]
