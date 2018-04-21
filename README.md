@@ -31,3 +31,11 @@ ENTRYPOINT ["entrypoint.sh"]
 Copy apb.yml.example to $YOUR_BUNDLE_PATH/apb.yml and modify values as you see fit.
 
 Build and and push the image like a normal service bundle.
+
+## Tiller
+
+Tiller is optional. If tiller is deployed in the target namespace, it will be
+used to do the provision.
+
+If tiller is not found, `helm template` will be used to create a manifest,
+which will be passed into `kubectl create`.
