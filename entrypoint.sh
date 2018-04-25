@@ -45,11 +45,24 @@ fi
 
 ### HELM
 
-helm template --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
-echo "##########################"
-cat /tmp/manifest
-echo "##########################"
-kubectl $KUBECTL_COMMAND -n $TARGET_NAMESPACE -f /tmp/manifest
+if helm version --tiller-namespace $TARGET_NAMESPACE; then
+    echo Using tiller
+    if [[ $ACTION == provision ]]; then
+        echo Provisioning
+        helm install --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE --namespace $TARGET_NAMESPACE --tiller-namespace $TARGET_NAMESPACE /opt/chart.tgz
+    fi
+    if [[ $ACTION == deprovision ]]; then
+        echo Deprovisioning
+        helm delete --debug --tiller-namespace $TARGET_NAMESPACE bundle-${INSTANCE_ID::8}
+    fi
+else
+    echo Using helm template and kubectl create
+    helm template --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
+    echo "##########################"
+    cat /tmp/manifest
+    echo "##########################"
+    kubectl $KUBECTL_COMMAND -n $TARGET_NAMESPACE -f /tmp/manifest
+fi
 
 ###
 
