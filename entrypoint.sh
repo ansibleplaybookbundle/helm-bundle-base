@@ -27,6 +27,7 @@ export INSTANCE_ID=$(echo $2 | jq -r ._apb_service_instance_id)
 export REPO_URL=$(echo $2 | jq -r .repo)
 export REPO_NAME="chartrepo"
 export CHART=$(echo $2 | jq -r .chart)
+export CHART_NAME="/opt/chart.tgz"
 export VERSION=$(echo $2 | jq -r .version)
 export NAME="helm-${INSTANCE_ID::8}"
 export VALUES_FILE=$(mktemp --tmpdir= values.XXXX)
@@ -36,26 +37,27 @@ echo "$2" | jq -r .values | tee $VALUES_FILE
 helm init --client-only
 
 if [[ -n "$REPO_URL" && -n "$CHART" && -n "$VERSION" ]]; then
+    CHART_NAME="/opt/apb/$CHART-$VERSION.tgz"
     helm repo add $REPO_NAME $REPO_URL
-    helm fetch $REPO_NAME/$CHART --version=$VERSION -d /opt/chart.tgz
+    helm fetch $REPO_NAME/$CHART --version=$VERSION -d /opt/apb
 fi
 
 if helm version --tiller-namespace $TARGET_NAMESPACE; then
     echo Using tiller
     if [[ $ACTION == provision ]]; then
         echo Provisioning
-        helm install --debug --name $NAME -f $VALUES_FILE --namespace $TARGET_NAMESPACE --tiller-namespace $TARGET_NAMESPACE /opt/chart.tgz
+        helm install --debug --name $NAME -f $VALUES_FILE --namespace $TARGET_NAMESPACE --tiller-namespace $TARGET_NAMESPACE $CHART_NAME
     fi
     if [[ $ACTION == deprovision ]]; then
         echo Deprovisioning
         helm delete --debug --tiller-namespace $TARGET_NAMESPACE $NAME
     fi
     if [[ $ACTION == update ]]; then
-        helm upgrade --debug --tiller-namespace $TARGET_NAMESPACE $NAME /opt/chart.tgz
+        helm upgrade --debug --tiller-namespace $TARGET_NAMESPACE $NAME $CHART_NAME
     fi
 else
     echo Using helm template and kubectl create
-    helm template --debug --name $NAME -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
+    helm template --debug --name $NAME -f $VALUES_FILE $CHART_NAME | sed -n '/---/,$p' > /tmp/manifest
     echo "##########################"
     cat /tmp/manifest
     echo "##########################"
