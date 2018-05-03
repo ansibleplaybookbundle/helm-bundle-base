@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+set -ex
 
 ACTION=$1
 shift
