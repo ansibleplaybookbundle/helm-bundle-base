@@ -57,7 +57,7 @@ if helm version --tiller-namespace $TARGET_NAMESPACE; then
     fi
 else
     echo Using helm template and kubectl create
-    helm template --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
+    helm template --debug --name bundle-${INSTANCE_ID::8} --namespace $TARGET_NAMESPACE -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
     echo "##########################"
     cat /tmp/manifest
     echo "##########################"
