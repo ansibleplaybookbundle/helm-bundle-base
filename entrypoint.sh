@@ -1,41 +1,9 @@
 #!/bin/bash
 
-set -x
-
-# Work-Around
-# The OpenShift's s2i (source to image) requires that no ENTRYPOINT exist
-# for any of the s2i builder base images.  Our 's2i-apb' builder uses the
-# apb-base as it's base image.  But since the apb-base defines its own
-# entrypoint.sh, it is not compatible with the current source-to-image.
-#
-# The below work-around checks if the entrypoint was called within the
-# s2i-apb's 'assemble' script process. If so, it skips the rest of the steps
-# which are APB run-time specific.
-#
-# Details of the issue in the link below:
-# https://github.com/openshift/source-to-image/issues/475
-#
-if [[ $@ == *"s2i/assemble"* ]]; then
-  echo "---> Performing S2I build... Skipping server startup"
-  exec "$@"
-  exit $?
-fi
+set -ex
 
 ACTION=$1
-if [[ $ACTION == provision ]]; then
-    KUBECTL_COMMAND=create
-elif [[ $ACTION == deprovision ]]; then
-    KUBECTL_COMMAND=delete
-else
-    echo First argument must be one of "provision" or "deprovision".
-    exit 1
-fi
-
 shift
-TARGET_NAMESPACE=$(echo "$2" | jq -r .namespace)
-INSTANCE_ID=$(echo "$2" | jq -r ._apb_service_instance_id)
-VALUES_FILE=$(mktemp --tmpdir= values.XXXX)
-echo "$2" | jq -r .values | tee $VALUES_FILE
 
 if ! whoami &> /dev/null; then
   if [ -w /etc/passwd ]; then
@@ -43,21 +11,53 @@ if ! whoami &> /dev/null; then
   fi
 fi
 
+if [[ $ACTION == provision ]]; then
+    KUBECTL_COMMAND=create
+elif [[ $ACTION == deprovision ]]; then
+    KUBECTL_COMMAND=delete
+elif [[ $ACTION == update ]]; then
+    KUBECTL_COMMAND=apply
+else
+    echo "Action ($ACTION) not in [ provision, deprovision, update ]."
+    exit 1
+fi
+
+export TARGET_NAMESPACE=$(echo $2 | jq -r .namespace)
+export INSTANCE_ID=$(echo $2 | jq -r ._apb_service_instance_id)
+export REPO_URL=$(echo $2 | jq -r .repo)
+export REPO_NAME="chartrepo"
+export CHART=$(echo $2 | jq -r .chart)
+export CHART_NAME="/opt/chart.tgz"
+export VERSION=$(echo $2 | jq -r .version)
+export NAME="helm-${INSTANCE_ID::8}"
+export VALUES_FILE=$(mktemp --tmpdir= values.XXXX)
+echo "$2" | jq -r .values | tee $VALUES_FILE
+
 ### HELM
+helm init --client-only
+
+if [[ -n "$REPO_URL" && -n "$CHART" && -n "$VERSION" ]]; then
+    CHART_NAME="/opt/apb/$CHART-$VERSION.tgz"
+    helm repo add $REPO_NAME $REPO_URL
+    helm fetch $REPO_NAME/$CHART --version=$VERSION -d /opt/apb
+fi
 
 if helm version --tiller-namespace $TARGET_NAMESPACE; then
     echo Using tiller
     if [[ $ACTION == provision ]]; then
         echo Provisioning
-        helm install --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE --namespace $TARGET_NAMESPACE --tiller-namespace $TARGET_NAMESPACE /opt/chart.tgz
+        helm install --debug --name $NAME -f $VALUES_FILE --namespace $TARGET_NAMESPACE --tiller-namespace $TARGET_NAMESPACE $CHART_NAME
     fi
     if [[ $ACTION == deprovision ]]; then
         echo Deprovisioning
-        helm delete --debug --tiller-namespace $TARGET_NAMESPACE bundle-${INSTANCE_ID::8}
+        helm delete --debug --tiller-namespace $TARGET_NAMESPACE $NAME
+    fi
+    if [[ $ACTION == update ]]; then
+        helm upgrade --debug --tiller-namespace $TARGET_NAMESPACE $NAME $CHART_NAME
     fi
 else
     echo Using helm template and kubectl create
-    helm template --debug --name bundle-${INSTANCE_ID::8} -f $VALUES_FILE /opt/chart.tgz | sed -n '/---/,$p' > /tmp/manifest
+    helm template --debug --name $NAME -f $VALUES_FILE $CHART_NAME | sed -n '/---/,$p' > /tmp/manifest
     echo "##########################"
     cat /tmp/manifest
     echo "##########################"
