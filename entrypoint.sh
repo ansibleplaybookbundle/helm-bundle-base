@@ -37,9 +37,14 @@ echo "$2" | jq -r .values | tee $VALUES_FILE
 helm init --client-only
 
 if [[ -n "$REPO_URL" && -n "$CHART" && -n "$VERSION" ]]; then
-    CHART_NAME="/opt/apb/$CHART-$VERSION.tgz"
     helm repo add $REPO_NAME $REPO_URL
     helm fetch $REPO_NAME/$CHART --version=$VERSION -d /opt/apb
+    if [[ "$(basename -a $(ls -A /opt/apb/*.tgz 2>/dev/null) 2>/dev/null)" ]]; then
+        CHART_NAME=$(basename -a $(ls -A /opt/apb/*.tgz 2>/dev/null) 2>/dev/null)
+    else
+        echo "Chart with name ($CHART) and version ($VERSION) not found"
+        exit 1
+    fi
 fi
 
 if helm version --tiller-namespace $TARGET_NAMESPACE; then
